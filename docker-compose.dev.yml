@@ -1,0 +1,42 @@
+services:
+  backend-flask:
+    env_file:
+      - ./backend-flask/.env
+    build: ./backend-flask
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend-flask:/backend-flask
+  frontend-react-js:
+    env_file:
+      - ./frontend-react-js/.env
+    build: ./frontend-react-js
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend-react-js:/frontend-react-js
+  post:
+    image: postgres:13-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - '5436:5432'
+    volumes: 
+      - post:/var/lib/postgresql/data
+
+  dynamodb-local:
+    user: root
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    image: "amazon/dynamodb-local:latest"
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    volumes:
+      - "./docker/dynamodb:/home/dynamodblocal/data"
+    working_dir: /home/dynamodblocal      
+
+volumes:
+  post:
+    driver: local
