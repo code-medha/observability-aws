@@ -7,6 +7,7 @@ services:
       - "5000:5000"
     volumes:
       - ./backend-flask:/backend-flask
+
   frontend-react-js:
     env_file:
       - ./frontend-react-js/.env
@@ -15,6 +16,15 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend-react-js:/frontend-react-js
+
+  xray-daemon:
+    image: "amazon/aws-xray-daemon"
+    env_file:
+      - ./backend-flask/.env
+    command:
+      - "xray -o -b xray-daemon:2000"
+    ports:
+      - 2000:2000/udp      
   post:
     image: postgres:13-alpine
     restart: always
