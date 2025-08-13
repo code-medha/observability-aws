@@ -22,3 +22,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
