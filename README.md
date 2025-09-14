@@ -89,3 +89,7 @@ aws-vault exec <profile_name> -- <docker_compose_command>
 ```
 
 aws-vault exec dock -- docker compose -f ./docker-compose.dev.yml up -d
+
+## Create x-ray sampling and groups
+
+By default, the x-ray data contains lot of noise and we have to crack down to only the required data. Hence a sampling rlue is required. And the groups helps us to seggegrate the same set of data.
