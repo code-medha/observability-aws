@@ -22,8 +22,7 @@ from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 
 load_dotenv()
 
-xray_url = os.getenv("AWS_XRAY_URL")
-xray_recorder.configure(service='backend-flask')
+
 
 app = Flask(__name__)
 frontend = os.getenv('FRONTEND_URL')
@@ -37,7 +36,8 @@ cors = CORS(
   methods="OPTIONS,GET,HEAD,POST"
 )
 
-
+xray_url = os.getenv("AWS_XRAY_URL")
+xray_recorder.configure(service='backend-flask')
 XRayMiddleware(app, xray_recorder)
 
 @app.route("/api/message_groups", methods=['GET'])

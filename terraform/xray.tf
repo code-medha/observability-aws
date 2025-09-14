@@ -12,3 +12,9 @@ resource "aws_xray_sampling_rule" "xray" {
   version        = 1
 }
 
+# X-Ray Group
+resource "aws_xray_group" "backend" {
+  group_name        = "backend"
+  filter_expression = "service(\"backend-flask\")"
+}
+

@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta, timezone
+from aws_xray_sdk.core import xray_recorder
+
 class HomeActivities:
   def run():
     now = datetime.now(timezone.utc).astimezone()
+
+
+    subsegment = xray_recorder.begin_subsegment('database_query')
     results = [{
       'uuid': '68f126b0-1ceb-4a33-88be-d90fa7109eee',
       'handle':  'Andrew Brown',
@@ -41,4 +46,8 @@ class HomeActivities:
       'replies': []
     }
     ]
+
+    subsegment.put_metadata('num_results', len(results), 'database')
+
+    xray_recorder.end_subsegment()
     return results
