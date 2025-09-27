@@ -90,6 +90,58 @@ aws-vault exec <profile_name> -- <docker_compose_command>
 
 aws-vault exec dock -- docker compose -f ./docker-compose.dev.yml up -d
 
+## Instrumenting X-ray
+
+Insturmenting X-ray in our app includes the following steps:
+1. Add X-ray as a service in the `docker-compose.dev.yml`
+2. Install the X-ray python package
+3. Instrument the `app.py`
+4. Create custom X-ray Sampling Rule
+5. Create X-ray groups
+
+
+### Containerized X-ray service
+
+Append the following in the `docker-compose.dev.yml`:
+```
+  xray-daemon:
+    image: "amazon/aws-xray-daemon"
+    environment:
+      - AWS_REGION=us-east-1           
+      - AWS_ACCESS_KEY_ID           
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+    command:
+      - "xray -o -b xray-daemon:2000"
+    ports:
+      - 2000:2000/udp 
+```
+
+### Install the X-ray python package
+
+Add the following package in the `requirements.txt`:
+```
+aws-xray-sdk
+```
+
+### Instrument Your Application
+
+Add the following import statements in `app.py`:
+```
+#x-ray
+from aws_xray_sdk.core import xray_recorder
+from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
+```
+Add XRayMiddleware function to patch your Flask application in code:
+```
+xray_url = os.getenv("AWS_XRAY_URL")
+xray_recorder.configure(service='backend-flask')
+XRayMiddleware(app, xray_recorder)
+```
+
+
+
+
 ## Create x-ray sampling and groups
 
 By default, the x-ray data contains lot of noise and we have to crack down to only the required data. Hence a sampling rlue is required. And the groups helps us to seggegrate the same set of data.

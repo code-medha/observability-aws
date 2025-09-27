@@ -1,3 +1,5 @@
+# X-Ray Sampling Rule for Flask service traces            
+
 resource "aws_xray_sampling_rule" "xray" {
   rule_name      = "Flask"
   resource_arn   = "*"
@@ -12,7 +14,7 @@ resource "aws_xray_sampling_rule" "xray" {
   version        = 1
 }
 
-# X-Ray Group
+# X-Ray Group for Flask service traces  
 resource "aws_xray_group" "backend" {
   group_name        = "backend"
   filter_expression = "service(\"backend-flask\")"
