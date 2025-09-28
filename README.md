@@ -1,5 +1,8 @@
 # Observability-AWS
 
+The scope of this project is to learn the observability skills by configuring AWS X-ray and Cloudwatch with a Python Flask backend.
+
+In this project I will document the process involved in configuring HAWS X-ray and Cloudwatch.
 
 ## AWS X-Ray Architecture
 
