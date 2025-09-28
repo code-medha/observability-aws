@@ -1,4 +1,4 @@
-# Observability-aws
+# Observability-AWS
 
 
 ## AWS X-Ray Architecture
@@ -93,11 +93,15 @@ aws-vault exec dock -- docker compose -f ./docker-compose.dev.yml up -d
 ## Instrumenting X-ray
 
 Insturmenting X-ray in our app includes the following steps:
-1. Add X-ray as a service in the `docker-compose.dev.yml`
-2. Install the X-ray python package
-3. Instrument the `app.py`
-4. Create custom X-ray Sampling Rule
-5. Create X-ray groups
+1. Add X-ray env variables
+2. Add X-ray as a service in the `docker-compose.dev.yml`
+3. Install the X-ray python package
+4. Instrument the `app.py`
+5. Create custom X-ray Sampling Rule
+6. Create X-ray groups
+
+### X-ray env variables
+
 
 
 ### Containerized X-ray service
@@ -132,16 +136,128 @@ Add the following import statements in `app.py`:
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 ```
+
 Add XRayMiddleware function to patch your Flask application in code:
 ```
 xray_url = os.getenv("AWS_XRAY_URL")
-xray_recorder.configure(service='backend-flask')
+xray_recorder.configure(
+    service='backend-flask',
+    sampling=True,
+    daemon_address='xray-daemon:2000',
+    dynamic_naming=xray_url
+)
 XRayMiddleware(app, xray_recorder)
 ```
 
+### Create x-ray sampling rule and groups
+
+> Why we need to create a x-ray sampling rule:
+
+ By default, the X-Ray SDK records the first request each second, and five percent of any additional requests. One request per second is the reservoir. So you can create a custom sampling rule to control the amount of data that you record. Custom Sampling rules tell the X-Ray SDK how many requests to record for a set of criteria.
 
 
+> Why we need to create a x-ray groups:
+An X-Ray Group is basically a saved filter expression that lets you slice and dice traces. Think of it like a “saved view” of your traces.
 
-## Create x-ray sampling and groups
 
-By default, the x-ray data contains lot of noise and we have to crack down to only the required data. Hence a sampling rlue is required. And the groups helps us to seggegrate the same set of data.
+To create x-ray sampling rule and groups, let's make use of terraform.
+
+Create `~/terraform/` directory from the root and add the following files:
+
+`xray.tf`
+
+```
+# X-Ray Sampling Rule for Flask service traces            
+
+resource "aws_xray_sampling_rule" "xray" {
+  rule_name      = "Flask"
+  resource_arn   = "*"
+  priority       = 9000
+  fixed_rate     = 0.1
+  reservoir_size = 5
+  service_name   = "backend-flask"
+  service_type   = "*"
+  host           = "*"
+  http_method    = "*"
+  url_path       = "*"
+  version        = 1
+}
+
+# X-Ray Group for Flask service traces  
+resource "aws_xray_group" "backend" {
+  group_name        = "backend"
+  filter_expression = "service(\"backend-flask\")"
+}
+```
+
+`variables.tf`
+```
+variable "aws_region" {
+  description = "AWS region to deploy to"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "aws_profile" {
+  description = "AWS CLI profile to use"
+  type        = string
+  default     = "default"
+}
+```
+
+`providers.tf`
+```
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+
+provider "aws" {
+  region  = var.aws_region
+  profile = var.aws_profile
+}
+```
+
+To run the terrform, follow these steps:
+```
+cd terraform/
+terraform init
+terraform plan
+terraform apply -y
+```
+
+## Testing the AWS X-Ray Implementation
+
+After you've insturmneted the app.py and created sampling rule and groups, now it's time to see the AWS X-ray in action:
+
+Run the following command to run the docker compose file:
+```
+aws-vault exec dock -- docker compose -f ./docker-compose.dev.yml up -d --build
+```
+
+Go to your browser and enter localhost:5000/api/activities/home and refersh multiple times to send the request. (more than 15 times)
+
+Login to AWS web-console. Enter x-ray settings from the search bar. You will be redirected to Cloudwatch page.
+
+To view the spans,from the left naviagtion, select **Application Signals --> Transaction Search**
+
+![](/images/transaction-search.png)
+
+To view the traces, from the left naviagtion, select **Application Signals --> Traces**
+
+![](/images/traces.png)
+
+![](/images/trace-details.png)
+
+To view the trace map, from the left naviagtion, select **Application Signals --> Trace Map**
+
+![](/images/trace-map.png)
+
+(Optional) Docker AWS X-ray daemon logs to verify the data.
+![](/images/cmd-xray.png)
+
+
