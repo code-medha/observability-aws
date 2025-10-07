@@ -1,115 +1,136 @@
 # Observability-AWS
 
-The scope of this project is to learn the observability skills by configuring AWS X-ray and Cloudwatch with a Python Flask backend.
+The scope of this project is to learn observability skills by configuring AWS X-Ray with a Python Flask backend.
 
-In this project I will document the process involved in configuring HAWS X-ray and Cloudwatch.
+In this project, I will document the process involved in configuring AWS X-Ray.
+
+---
 
 ## AWS X-Ray Architecture
 
-Before we instrument x-ray into our application, it's important to understand how x-ray works behind the scenes. Because it's not a striaght forward implementation like Honeycomb.io tool.
+Before we instrument X-Ray into our application, it's important to understand how X-Ray works behind the scenes. It's not as straightforward as implementing some other observability tools (like [Honeycomb.io](https://www.honeycomb.io/)). X-Ray follows a slightly different approach.
 
-When you instrument your application with AWS X-Ray client SDKs, they don't directly send your application trace data directly to X-Ray. Instead each client SDK generates trace segments and sends them to x-ray daemon, which in turn sends to x-ray.
+When you instrument your application with AWS X-Ray client SDKs, they don't send your application trace data directly to X-Ray. Instead, each client SDK generates trace segments and sends them to a local process.
 
-> So, What is X-Ray daemon?
+> **So, what is the X-Ray daemon?**
 
-The X-Ray daemon is a service that gathers the trace segments from the AWS X-Ray client SDKs and relays it to the AWS X-Ray dashboard.
+The X-Ray daemon is a service that gathers the trace segments from the AWS X-Ray client SDKs, batches them, and relays them to the AWS X-Ray dashboard.
 
+> **Why don't X-Ray client SDKs send traces directly to X-Ray?**
 
-> You might get a question now why X-Ray client SDKs doesn't directly send your application trace to X-Ray?
+The SDKs avoid sending traces directly to the AWS X-Ray service to minimize network overhead on every trace event. The daemon batches and transmits data efficiently.
 
-Because X-Ray SDKs don’t directly push trace data to the AWS X-Ray service to avoid network overhead on every trace event.
-
-
-The X-Ray daemon runs separately from your application and can be deployed in several ways:
+**The X-Ray daemon runs separately from your application and can be deployed in several ways:**
 
 - As a standalone process on EC2 instances
 - As a sidecar container in containerized environments
 - Built into AWS services like Lambda, App Runner, and Elastic Beanstalk
 
-In this project we will use it as a sidecar container along with other services.
+In this project, we will use it as a sidecar container along with other services.
 
-> Data Flow Visualization:
+> **Data Flow Visualization:**
 
+```
 Application → X-Ray SDK → X-Ray Daemon → X-Ray Service → X-Ray Console
+```
 
+---
 
 ## AWS-Vault
 
-When we are working with AWS X-Ray, we need to configure AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID to send the traces to our AWS account. So, let's understand how we can store AWS_SECRET_ACCESS_KEY and AWS_ACCESS_KEY_ID:
+When working with AWS X-Ray, we need to configure `AWS_SECRET_ACCESS_KEY` and `AWS_ACCESS_KEY_ID` to send the traces to our AWS account. Let's look at secure ways to store AWS credentials:
 
-- .env file: Yes, we can store the AWS creds in your project's .env file. However, it comes with a security risk because it may appear in build logs or container inspection
+- **.env file:**  
+  Storing AWS creds in your project's `.env` file is possible, but risky. Credentials may leak via build logs or container inspection.
 
-- AWS Credentials File Mounting: This is more secure when compared to storing in .env file. However, it may include in system backups, docker image layers.
+- **AWS Credentials File Mounting:**  
+  More secure than a `.env` file, but credentials could be included in system backups or Docker image layers.
 
-- AWS Vault: One of the most secure ways to store your AWS creds. One of the advantage of AWS vault is it never share the creds with services. Instead, it shares a tempoprary token and jummbled up AWS creds. This way your creds don't leave your local developement. I will use AWS Vault in this project.
+- **AWS Vault:**  
+  One of the most secure ways to store your AWS credentials locally. AWS Vault never shares your real credentials with services—instead, it provides temporary tokens and obfuscated keys.
 
-AWS Vault:
+**AWS Vault Key Points:**
 
-- Stores credentials in OS keystore (encrypted)
+- Stores credentials in your OS keystore (encrypted)
 - Generates temporary credentials
 - No plain text credential files
 - Works seamlessly with Docker Compose
-- Supports MFA and assume role
+- Supports MFA and role assumption
+
+---
 
 ## Installing aws-vault
 
 On a Linux machine, follow these steps:
 
 1. Download the aws-vault pre-compiled binary file:
-```
-$ sudo curl -L -o /usr/local/bin/aws-vault https://github.com/99designs/aws-vault/releases/download/v7.2.0/aws-vault-linux-amd64
-```
+   ```
+   sudo curl -L -o /usr/local/bin/aws-vault https://github.com/99designs/aws-vault/releases/download/v7.2.0/aws-vault-linux-amd64
+   ```
+
 2. Set executable permissions:
-```
-$ sudo chmod 755 /usr/local/bin/aws-vault
-```
+   ```
+   sudo chmod 755 /usr/local/bin/aws-vault
+   ```
+
 3. Confirm the installation:
-```
-$ aws-vault --version
-```
+   ```
+   aws-vault --version
+   ```
+
+---
 
 ## Configuring aws-vault
 
 1. Add a profile:
-```
-$ aws-vault add <profilename>
-```
+   ```
+   aws-vault add <profilename>
+   ```
 
-2. Enter your AWS_ACCESS_KEY_ID
+2. Enter your `AWS_ACCESS_KEY_ID`
 
-2. Enter your AWS_SECRET_ACCESS_KEY
+3. Enter your `AWS_SECRET_ACCESS_KEY`
 
-3. (Optional) Skip setting the password for oskeychain. I skipped it.
+4. (Optional) Skip setting the password for oskeychain. I skipped it.
 
-4. Confirm your account details:
-```
-$ aws-vault exec dock -- aws sts get-caller-identity
-```
+5. Confirm your account details:
+   ```
+   aws-vault exec <profilename> -- aws sts get-caller-identity
+   ```
 
-After configuration is complete, you need to append the docker compose command with aws-vault exec command anytime you run the docker compose.
+After configuration, you need to prepend your docker compose command with `aws-vault exec` every time you run it:
 ```
 aws-vault exec <profile_name> -- <docker_compose_command>
 ```
 
+**Example:**
+```
 aws-vault exec dock -- docker compose -f ./docker-compose.dev.yml up -d
+```
 
-## Instrumenting X-ray
+---
 
-Insturmenting X-ray in our app includes the following steps:
-1. Add X-ray env variables
-2. Add X-ray as a service in the `docker-compose.dev.yml`
-3. Install the X-ray python package
+## Instrumenting X-Ray
+
+Instrumenting X-Ray in our app includes the following steps:
+1. Add X-Ray environment variables
+2. Add X-Ray as a service in the `docker-compose.dev.yml`
+3. Install the X-Ray Python package
 4. Instrument the `app.py`
-5. Create custom X-ray Sampling Rule
-6. Create X-ray groups
+5. Create a custom X-Ray Sampling Rule
+6. Create X-Ray groups
 
-### X-ray env variables
+### 1. X-Ray Environment Variables
 
+You will need to provide these variables to both the X-Ray Daemon and your application:
+- `AWS_REGION`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN`
 
+### 2. Containerized X-Ray Service
 
-### Containerized X-ray service
-
-Append the following in the `docker-compose.dev.yml`:
+Append the following to your `docker-compose.dev.yml`:
 ```
   xray-daemon:
     image: "amazon/aws-xray-daemon"
@@ -124,24 +145,26 @@ Append the following in the `docker-compose.dev.yml`:
       - 2000:2000/udp 
 ```
 
-### Install the X-ray python package
+### 3. Install the X-Ray Python Package
 
-Add the following package in the `requirements.txt`:
+Add the following package to `requirements.txt`:
 ```
 aws-xray-sdk
 ```
 
-### Instrument Your Application
+### 4. Instrument Your Application
 
-Add the following import statements in `app.py`:
-```
-#x-ray
+Add these import statements to `app.py`:
+```python
+# x-ray
 from aws_xray_sdk.core import xray_recorder
 from aws_xray_sdk.ext.flask.middleware import XRayMiddleware
 ```
 
-Add XRayMiddleware function to patch your Flask application in code:
-```
+Patch your Flask application with:
+```python
+import os
+
 xray_url = os.getenv("AWS_XRAY_URL")
 xray_recorder.configure(
     service='backend-flask',
@@ -152,26 +175,26 @@ xray_recorder.configure(
 XRayMiddleware(app, xray_recorder)
 ```
 
-### Create x-ray sampling rule and groups
 
-> Why we need to create a x-ray sampling rule:
+### 5. Create X-Ray Sampling Rule and Groups
 
- By default, the X-Ray SDK records the first request each second, and five percent of any additional requests. One request per second is the reservoir. So you can create a custom sampling rule to control the amount of data that you record. Custom Sampling rules tell the X-Ray SDK how many requests to record for a set of criteria.
+> **Why create a custom X-Ray sampling rule?**  
+By default, the X-Ray SDK records the first request each second, and 5% of any additional requests (1 request/sec is the reservoir). Custom sampling rules let you control trace volume for your environment.
 
+> **Why create X-Ray groups?**  
+An X-Ray Group is a saved filter expression that lets you segment, slice, and analyze traces—like a “saved view” of your traces.
 
-> Why we need to create a x-ray groups:
-An X-Ray Group is basically a saved filter expression that lets you slice and dice traces. Think of it like a “saved view” of your traces.
+To create X-Ray sampling rules and groups, let's use Terraform.
 
+---
 
-To create x-ray sampling rule and groups, let's make use of terraform.
+## Terraform Setup for X-Ray Sampling Rules & Groups
 
-Create `~/terraform/` directory from the root and add the following files:
+Create a `./terraform/` directory in your project root and add the following files:
 
-`xray.tf`
-
+**`xray.tf`**
 ```
 # X-Ray Sampling Rule for Flask service traces            
-
 resource "aws_xray_sampling_rule" "xray" {
   rule_name      = "Flask"
   resource_arn   = "*"
@@ -193,7 +216,7 @@ resource "aws_xray_group" "backend" {
 }
 ```
 
-`variables.tf`
+**`variables.tf`**
 ```
 variable "aws_region" {
   description = "AWS region to deploy to"
@@ -208,7 +231,7 @@ variable "aws_profile" {
 }
 ```
 
-`providers.tf`
+**`providers.tf`**
 ```
 terraform {
   required_providers {
@@ -225,13 +248,17 @@ provider "aws" {
 }
 ```
 
-To run the terrform, follow these steps:
+**To deploy with Terraform:**
 ```
 cd terraform/
 terraform init
+terraform fmt
+terraform validate
 terraform plan
 terraform apply -y
 ```
+
+---
 
 ## Testing the AWS X-Ray Implementation
 
@@ -263,4 +290,5 @@ To view the trace map, from the left naviagtion, select **Application Signals --
 (Optional) Docker AWS X-ray daemon logs to verify the data.
 ![](/images/cmd-xray.png)
 
+*Happy tracing!*
 
